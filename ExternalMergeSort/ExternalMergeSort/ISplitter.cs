@@ -7,5 +7,6 @@ namespace ExternalMergeSort
 {
     interface ISplitter
     {
+        void Split();
     }
 }

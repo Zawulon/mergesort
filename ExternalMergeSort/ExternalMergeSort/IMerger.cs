@@ -7,5 +7,6 @@ namespace ExternalMergeSort
 {
     interface IMerger
     {
+        void MergeChunks();
     }
 }
