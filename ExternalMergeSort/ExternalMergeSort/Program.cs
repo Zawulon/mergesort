@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Text;
 using System.IO;
+using System.IO.MemoryMappedFiles;
 using System.Diagnostics;
 
 namespace ExternalMergeSort
@@ -10,7 +11,7 @@ namespace ExternalMergeSort
     {
         //co ile wierszy raportować progress 5000
         static int rowDivider = 5000;
-                                                       
+
         //ile max linii z pliku czytac i dzielic pliki 100000000
         static int fileSizeDivider = 100000000;
 
@@ -20,7 +21,7 @@ namespace ExternalMergeSort
             // http://en.wikipedia.org/wiki/External_sorting
             // The idea is to keep the memory usage below 50megs.
 
-            Split("c:\\ExternalMergeSortResults.txt");
+            Split("c:\\tmp\\ExternalMergeSortResults.txt");
 
             MemoryUsage();
 
@@ -167,6 +168,77 @@ namespace ExternalMergeSort
             W("Sorting chunks completed");
         }
 
+
+        static void CreateSplitFiles(long blocksize, string filepath)
+        {
+
+            using (FileStream fs = new FileStream(filepath, FileMode.Open, FileAccess.ReadWrite))
+            {
+                using (MemoryMappedFile mmf = MemoryMappedFile.CreateFromFile(fs, "test", fs.Length, MemoryMappedFileAccess.ReadWrite, null, HandleInheritability.None, false))
+                {
+                    long offset = 0;
+
+                    try
+                    {
+                        do
+                        {
+                            long remaining = fs.Length - offset;
+                            using (MemoryMappedViewStream mmStream = mmf.CreateViewStream(offset, remaining > blocksize ? blocksize : remaining))
+                            {
+                                offset += blocksize;
+                                using (StreamReader sr = new StreamReader(mmStream))
+                                {
+                                    //Read file  contents say character  by character
+                                    char[] buffer = new char[blocksize];
+                                    while (true)
+                                    {
+                                        if (sr.Read(buffer, 0, 1) == 0)
+                                            break;
+                                    }
+                                }
+                            }
+                        } while (offset < fs.Length);
+                    }
+                    catch (Exception e)
+                    {
+                        Console.WriteLine(e.Message);
+                    }
+                }
+            }
+
+            //// Create the memory-mapped file. 
+            //Stopwatch stopWatch = new Stopwatch();
+            //stopWatch.Start();
+            //FileInfo fi = new FileInfo(filepath);
+            //long split_num = fi.Length / blocksize;
+            //using (var mmf = MemoryMappedFile.CreateFromFile(filepath, FileMode.Open, "ImgA"))
+            //{
+            //    // Create a random access view, from the 256th megabyte (the offset) 
+            //    // to the 768th megabyte (the offset plus length). 
+            //    using (MemoryMappedViewStream accessor = mmf.CreateViewStream(offset, fi.Length, MemoryMappedFileAccess.Read))
+            //    {
+            //        List<string> lines = new List<string>(200);
+            //        StreamReader reader = new StreamReader(accessor);
+            //        while (!reader.EndOfStream)
+            //        {
+            //            lines.Add(reader.ReadLine());
+            //        }
+            //        // Sort the in-memory array
+            //        string[] contents = lines.ToArray();
+            //        Array.Sort(contents);
+
+
+            //        // Create the 'sorted' filename
+            //        string newpath = string.Format("c:\\sorted{0:d5}.dat", split_num);
+            //        // Write it
+            //        File.WriteAllLines(newpath, contents);
+
+            //    }
+            //}
+            //stopWatch.Stop();
+            //TimeSpan ts = stopWatch.Elapsed;
+        }
+
         /// <summary>
         /// Split the big file into chunks
         /// This kept memory usage to 8mb, with 10mb chunks
@@ -178,6 +250,8 @@ namespace ExternalMergeSort
             int split_num = 1;
             StreamWriter sw = new StreamWriter(string.Format("c:\\split{0:d5}.dat", split_num));
             long read_line = 0;
+            int blocksize = 14;
+           // CreateSplitFiles(blocksize, file);
             using (StreamReader sr = new StreamReader(file))
             {
                 while (sr.Peek() >= 0)
@@ -192,7 +266,7 @@ namespace ExternalMergeSort
 
                     // If the file is big, then make a new split,
                     // however if this was the last line then don't bother
-                    if (sw.BaseStream.Length > fileSizeDivider && sr.Peek() >= 0)
+                    if (read_line / split_num > fileSizeDivider && sr.Peek() >= 0)
                     {
                         sw.Close();
                         split_num++;
